@@ -10,355 +10,362 @@ using AsterNET.Manager.Response;
 
 namespace AsterNET.Manager
 {
-	/// <summary>
-	///     Default implementation of the ManagerReader interface.
-	/// </summary>
-	public class ManagerReader
-	{
+    /// <summary>
+    ///     Default implementation of the ManagerReader interface.
+    /// </summary>
+    public class ManagerReader
+    {
 #if LOGGER
-		private readonly Logger logger = Logger.Instance();
+        private readonly Logger logger = Logger.Instance();
 #endif
 
-		private readonly ManagerConnection mrConnector;
-		private SocketConnection mrSocket;
+        private readonly ManagerConnection mrConnector;
+        private SocketConnection mrSocket;
 
-		private bool die;
-		private bool is_logoff;
-		private bool disconnect;
-		private byte[] lineBytes;
-		private string lineBuffer;
-		private readonly Queue<string> lineQueue;
-		private ResponseHandler pingHandler;
-		private bool processingCommandResult;
-		private bool wait4identiier;
-		private DateTime lastPacketTime;
-		private readonly Dictionary<string, string> packet;
-		private readonly List<string> commandList;
+        private bool die;
+        private bool is_logoff;
+        private bool disconnect;
+        private byte[] lineBytes;
+        private string lineBuffer;
+        private readonly Queue<string> lineQueue;
+        private ResponseHandler pingHandler;
+        private bool processingCommandResult;
+        private bool wait4identiier;
+        private DateTime lastPacketTime;
+        private readonly Dictionary<string, string> packet;
+        private readonly List<string> commandList;
 
-		#region ManagerReader(dispatcher, asteriskServer) 
+        #region ManagerReader(dispatcher, asteriskServer) 
 
-		/// <summary>
-		///     Creates a new ManagerReader.
-		/// </summary>
-		/// <param name="dispatcher">the dispatcher to use for dispatching events and responses.</param>
-		public ManagerReader(ManagerConnection connection)
-		{
-			mrConnector = connection;
-			die = false;
-			lineQueue = new Queue<string>();
-			packet = new Dictionary<string, string>();
-			commandList = new List<string>();
-		}
+        /// <summary>
+        ///     Creates a new ManagerReader.
+        /// </summary>
+        /// <param name="dispatcher">the dispatcher to use for dispatching events and responses.</param>
+        public ManagerReader(ManagerConnection connection)
+        {
+            mrConnector = connection;
+            die = false;
+            lineQueue = new Queue<string>();
+            packet = new Dictionary<string, string>();
+            commandList = new List<string>();
+        }
 
-		#endregion
+        #endregion
 
-		#region Socket 
+        #region Socket 
 
-		/// <summary>
-		///     Sets the socket to use for reading from the asterisk server.
-		/// </summary>
-		internal SocketConnection Socket
-		{
-			set { mrSocket = value; }
-		}
+        /// <summary>
+        ///     Sets the socket to use for reading from the asterisk server.
+        /// </summary>
+        internal SocketConnection Socket
+        {
+            set { mrSocket = value; }
+        }
 
-		#endregion
+        #endregion
 
-		#region Die 
+        #region Die 
 
-		internal bool Die
-		{
-			get { return die; }
-			set
-			{
-				die = value;
-				if (die)
-					mrSocket = null;
-			}
-		}
+        internal bool Die
+        {
+            get { return die; }
+            set
+            {
+                die = value;
+                if (die)
+                    mrSocket = null;
+            }
+        }
 
-		#endregion
+        #endregion
 
-		#region IsLogoff 
+        #region IsLogoff 
 
-		internal bool IsLogoff
-		{
-			set { is_logoff = value; }
-		}
+        internal bool IsLogoff
+        {
+            set { is_logoff = value; }
+        }
 
-		#endregion
+        #endregion
 
-		#region mrReaderCallbback(IAsyncResult ar) 
+        #region mrReaderCallbback(IAsyncResult ar) 
 
-		/// <summary>
-		/// Async Read callback
-		/// </summary>
-		/// <param name="ar">IAsyncResult</param>
-		private void mrReaderCallbback(IAsyncResult ar)
-		{
-			// mreader = Mr.Reader
-			var mrReader = (ManagerReader) ar.AsyncState;
-			if (mrReader.die)
-				return;
+        /// <summary>
+        /// Async Read callback
+        /// </summary>
+        /// <param name="ar">IAsyncResult</param>
+        private void mrReaderCallbback(IAsyncResult ar)
+        {
+            // mreader = Mr.Reader
+            var mrReader = (ManagerReader)ar.AsyncState;
+            if (mrReader.die)
+                return;
 
-			SocketConnection mrSocket = mrReader.mrSocket;
-			if (mrSocket == null || mrSocket.TcpClient == null)
-			{
-				// No socket - it's DISCONNECT !!!
-				disconnect = true;
-				return;
-			}
+            SocketConnection mrSocket = mrReader.mrSocket;
+            if (mrSocket == null || mrSocket.TcpClient == null)
+            {
+                // No socket - it's DISCONNECT !!!
+                disconnect = true;
+                return;
+            }
 
-			NetworkStream nstream = mrSocket.NetworkStream;
-			if (nstream == null)
-			{
-				// No network stream - it's DISCONNECT !!!
-				disconnect = true;
-				return;
-			}
+            NetworkStream nstream = mrSocket.NetworkStream;
+            if (nstream == null)
+            {
+                // No network stream - it's DISCONNECT !!!
+                disconnect = true;
+                return;
+            }
 
-			try
-			{
-				int count = nstream.EndRead(ar);
-				if (count == 0)
-				{
-					// No received data - it's may be DISCONNECT !!!
-					if (!is_logoff)
-						disconnect = true;
-					return;
-				}
-				string line = mrSocket.Encoding.GetString(mrReader.lineBytes, 0, count);
-				mrReader.lineBuffer += line;
-				int idx;
-				// \n - because not all dev in Digium use \r\n
-				// .Trim() kill \r
-				lock (((ICollection) lineQueue).SyncRoot)
-					while (!string.IsNullOrEmpty(mrReader.lineBuffer) && (idx = mrReader.lineBuffer.IndexOf('\n')) >= 0)
-					{
-						line = idx > 0 ? mrReader.lineBuffer.Substring(0, idx).Trim() : string.Empty;
-						mrReader.lineBuffer = (idx + 1 < mrReader.lineBuffer.Length
-							? mrReader.lineBuffer.Substring(idx + 1)
-							: string.Empty);
-						lineQueue.Enqueue(line);
-					}
-				// Give a next portion !!!
-				nstream.BeginRead(mrReader.lineBytes, 0, mrReader.lineBytes.Length, mrReaderCallbback, mrReader);
-			}
+            try
+            {
+                int count = nstream.EndRead(ar);
+                if (count == 0)
+                {
+                    // No received data - it's may be DISCONNECT !!!
+                    if (!is_logoff)
+                        disconnect = true;
+                    return;
+                }
+                string line = mrSocket.Encoding.GetString(mrReader.lineBytes, 0, count);
+                mrReader.lineBuffer += line;
+                int idx;
+                // \n - because not all dev in Digium use \r\n
+                // .Trim() kill \r
+                lock (((ICollection)lineQueue).SyncRoot)
+                    while (!string.IsNullOrEmpty(mrReader.lineBuffer) && (idx = mrReader.lineBuffer.IndexOf('\n')) >= 0)
+                    {
+                        line = idx > 0 ? mrReader.lineBuffer.Substring(0, idx).Trim() : string.Empty;
+                        mrReader.lineBuffer = (idx + 1 < mrReader.lineBuffer.Length
+                            ? mrReader.lineBuffer.Substring(idx + 1)
+                            : string.Empty);
+                        lineQueue.Enqueue(line);
+                    }
+                // Give a next portion !!!
+                nstream.BeginRead(mrReader.lineBytes, 0, mrReader.lineBytes.Length, mrReaderCallbback, mrReader);
+            }
 #if LOGGER
-			catch (Exception ex)
-			{
-				mrReader.logger.Error("Read data error", ex.Message);
+            catch (Exception ex)
+            {
+                mrReader.logger.Error("Read data error", ex.Message);
 #else
 			catch
 			{
 #endif
-				// Any catch - disconncatch !
-				disconnect = true;
-				if (mrReader.mrSocket != null)
-					mrReader.mrSocket.Close();
-				mrReader.mrSocket = null;
-			}
-		}
+                // Any catch - disconncatch !
+                disconnect = true;
+                if (mrReader.mrSocket != null)
+                    mrReader.mrSocket.Close();
+                mrReader.mrSocket = null;
+            }
 
-		#endregion
 
-		#region Reinitialize 
+        }
 
-		internal void Reinitialize()
-		{
-			mrSocket.Initial = false;
-			disconnect = false;
-			lineQueue.Clear();
-			packet.Clear();
-			commandList.Clear();
-			lineBuffer = string.Empty;
-			lineBytes = new byte[mrSocket.TcpClient.ReceiveBufferSize];
-			lastPacketTime = DateTime.Now;
-			wait4identiier = true;
-			processingCommandResult = false;
-			mrSocket.NetworkStream.BeginRead(lineBytes, 0, lineBytes.Length, mrReaderCallbback, this);
-			lastPacketTime = DateTime.Now;
-		}
+        #endregion
 
-		#endregion
+        #region Reinitialize 
 
-		#region Run()
+        internal void Reinitialize()
+        {
+            mrSocket.Initial = false;
+            disconnect = false;
+            lineQueue.Clear();
+            packet.Clear();
+            commandList.Clear();
+            lineBuffer = string.Empty;
+            lineBytes = new byte[mrSocket.TcpClient.ReceiveBufferSize];
+            lastPacketTime = DateTime.Now;
+            wait4identiier = true;
+            processingCommandResult = false;
+            mrSocket.NetworkStream.BeginRead(lineBytes, 0, lineBytes.Length, mrReaderCallbback, this);
+            lastPacketTime = DateTime.Now;
+        }
 
-		/// <summary>
-		/// Reads line by line from the asterisk server, sets the protocol identifier as soon as it is
-		/// received and dispatches the received events and responses via the associated dispatcher.
-		/// </summary>
-		/// <seealso cref="ManagerConnection.DispatchEvent(ManagerEvent)" />
-		/// <seealso cref="ManagerConnection.DispatchResponse(Response.ManagerResponse)" />
-		/// <seealso cref="ManagerConnection.setProtocolIdentifier(String)" />
-		internal void Run()
-		{
-			if (mrSocket == null)
-				throw new SystemException("Unable to run: socket is null.");
+        #endregion
 
-			string line;
+        #region Run()
 
-			while (true)
-			{
-				try
-				{
-					while (!die)
-					{
-						#region check line from *
+        /// <summary>
+        /// Reads line by line from the asterisk server, sets the protocol identifier as soon as it is
+        /// received and dispatches the received events and responses via the associated dispatcher.
+        /// </summary>
+        /// <seealso cref="ManagerConnection.DispatchEvent(ManagerEvent)" />
+        /// <seealso cref="ManagerConnection.DispatchResponse(Response.ManagerResponse)" />
+        /// <seealso cref="ManagerConnection.setProtocolIdentifier(String)" />
+        internal void Run()
+        {
+            if (mrSocket == null)
+                throw new SystemException("Unable to run: socket is null.");
 
-						if (!is_logoff)
-						{
-							if (mrSocket != null && mrSocket.Initial)
-							{
-								Reinitialize();
-							}
-							else if (disconnect)
-							{
-								disconnect = false;
-								mrConnector.DispatchEvent(new DisconnectEvent(mrConnector));
-							}
-						}
-						if (lineQueue.Count == 0)
-						{
-							if (lastPacketTime.AddMilliseconds(mrConnector.PingInterval) < DateTime.Now
-								&& mrConnector.PingInterval > 0
-								&& mrSocket != null
-								&& !wait4identiier
-								&& !is_logoff
-								)
-							{
-								if (pingHandler != null)
-								{
-									if (pingHandler.Response == null)
-									{
-										// If one PingInterval from Ping without Pong then send Disconnect event
-										mrConnector.RemoveResponseHandler(pingHandler);
-										mrConnector.DispatchEvent(new DisconnectEvent(mrConnector));
-									}
-									pingHandler.Free();
-									pingHandler = null;
-								}
-								else
-								{
-									// Send PING to *
-									try
-									{
-										pingHandler = new ResponseHandler(new PingAction(), null);
-										mrConnector.SendAction(pingHandler.Action, pingHandler);
-									}
-									catch
-									{
-										disconnect = true;
-										mrSocket = null;
-									}
-								}
-								lastPacketTime = DateTime.Now;
-							}
+            string line;
+
+            while (true)
+            {
+                try
+                {
+                    while (!die)
+                    {
+                        #region check line from *
+
+                        if (!is_logoff)
+                        {
+                            if (mrSocket != null && mrSocket.Initial)
+                            {
+                                Reinitialize();
+                            }
+                            else if (disconnect)
+                            {
+                                disconnect = false;
+                                mrConnector.DispatchEvent(new DisconnectEvent(mrConnector));
+                            }
+                        }
+                        if (lineQueue.Count == 0)
+                        {
+                            if (lastPacketTime.AddMilliseconds(mrConnector.PingInterval) < DateTime.Now
+                                && mrConnector.PingInterval > 0
+                                && mrSocket != null
+                                && !wait4identiier
+                                && !is_logoff
+                                )
+                            {
+                                if (pingHandler != null)
+                                {
+                                    if (pingHandler.Response == null)
+                                    {
+                                        // If one PingInterval from Ping without Pong then send Disconnect event
+                                        mrConnector.RemoveResponseHandler(pingHandler);
+                                        mrConnector.DispatchEvent(new DisconnectEvent(mrConnector));
+                                    }
+                                    pingHandler.Free();
+                                    pingHandler = null;
+                                }
+                                else
+                                {
+                                    // Send PING to *
+                                    try
+                                    {
+                                        pingHandler = new ResponseHandler(new PingAction(), null);
+                                        mrConnector.SendAction(pingHandler.Action, pingHandler);
+                                    }
+                                    catch
+                                    {
+                                        disconnect = true;
+                                        mrSocket = null;
+                                    }
+                                }
+                                lastPacketTime = DateTime.Now;
+                            }
 							Thread.Sleep(50);
 
-							continue;
-						}
+                            continue;
+                        }
 
-						#endregion
+                        #endregion
 
-						lastPacketTime = DateTime.Now;
-						lock (((ICollection) lineQueue).SyncRoot)
-							line = lineQueue.Dequeue().Trim();
+                        lastPacketTime = DateTime.Now;
+                        lock (((ICollection)lineQueue).SyncRoot)
+                            line = lineQueue.Dequeue().Trim();
 #if LOGGER
-						logger.Debug(line);
+                        logger.Debug(line);
 #endif
 
-						#region processing Response: Follows
+                        #region processing Response: Follows
 
-						if (processingCommandResult)
-						{
-							string lineLower = line.ToLower(Helper.CultureInfo);
-							if (lineLower == "--end command--")
-							{
-								var commandResponse = new CommandResponse();
-								Helper.SetAttributes(commandResponse, packet);
-								commandList.Add(line);
-								commandResponse.Result = commandList;
-								processingCommandResult = false;
-								packet.Clear();
-								mrConnector.DispatchResponse(commandResponse);
-							}
-							else if (lineLower.StartsWith("privilege: ")
-								|| lineLower.StartsWith("actionid: ")
-								|| lineLower.StartsWith("timestamp: ")
-								|| lineLower.StartsWith("server: ")
-								)
-								Helper.AddKeyValue(packet, line);
-							else
-								commandList.Add(line);
-							continue;
-						}
+                        if (processingCommandResult)
+                        {
+                            string lineLower = line.ToLower(Helper.CultureInfo);
+                            if (lineLower == "--end command--")
+                            {
+                                var commandResponse = new CommandResponse();
+                                Helper.SetAttributes(commandResponse, packet);
+                                commandList.Add(line);
+                                commandResponse.Result = commandList;
+                                processingCommandResult = false;
+                                packet.Clear();
+                                mrConnector.DispatchResponse(commandResponse);
+                            }
+                            else if (lineLower.StartsWith("privilege: ")
+                                || lineLower.StartsWith("actionid: ")
+                                || lineLower.StartsWith("timestamp: ")
+                                || lineLower.StartsWith("server: ")
+                                )
+                                Helper.AddKeyValue(packet, line);
+                            else
+                                commandList.Add(line);
+                            continue;
+                        }
 
-						#endregion
+                        #endregion
 
-						#region collect key: value and ProtocolIdentifier
+                        #region collect key: value and ProtocolIdentifier
 
-						if (!string.IsNullOrEmpty(line))
-						{
-							if (wait4identiier && line.StartsWith("Asterisk Call Manager"))
-							{
-								wait4identiier = false;
-								var connectEvent = new ConnectEvent(mrConnector);
-								connectEvent.ProtocolIdentifier = line;
-								mrConnector.DispatchEvent(connectEvent);
-								continue;
-							}
-							if (line.Trim().ToLower(Helper.CultureInfo) == "response: follows")
-							{
-								// Switch to wait "--END COMMAND--" mode
-								processingCommandResult = true;
-								packet.Clear();
-								commandList.Clear();
-								Helper.AddKeyValue(packet, line);
-								continue;
-							}
-							Helper.AddKeyValue(packet, line);
-							continue;
-						}
+                        if (!string.IsNullOrEmpty(line))
+                        {
+                            if (wait4identiier && (line.StartsWith("Asterisk Call Manager")
+#if ZYCOO
+                            // Zycoo CooVox-U20 V2 responds "VoIP API/AMI/2.0.0" as ProtocolIdentifier
+                                                   || line.StartsWith("VoIP API/AMI")
+#endif
+                                    ))
+                            {
+                                wait4identiier = false;
+                                var connectEvent = new ConnectEvent(mrConnector);
+                                connectEvent.ProtocolIdentifier = line;
+                                mrConnector.DispatchEvent(connectEvent);
+                                continue;
+                            }
+                            if (line.Trim().ToLower(Helper.CultureInfo) == "response: follows")
+                            {
+                                // Switch to wait "--END COMMAND--" mode
+                                processingCommandResult = true;
+                                packet.Clear();
+                                commandList.Clear();
+                                Helper.AddKeyValue(packet, line);
+                                continue;
+                            }
+                            Helper.AddKeyValue(packet, line);
+                            continue;
+                        }
 
-						#endregion
+                        #endregion
 
-						#region process events and responses
+                        #region process events and responses
 
-						if (packet.ContainsKey("event"))
-							mrConnector.DispatchEvent(packet);
+                        if (packet.ContainsKey("event"))
+                            mrConnector.DispatchEvent(packet);
 
-						else if (packet.ContainsKey("response"))
-							mrConnector.DispatchResponse(packet);
+                        else if (packet.ContainsKey("response"))
+                            mrConnector.DispatchResponse(packet);
 
-						#endregion
+                        #endregion
 
-						packet.Clear();
-					}
-					if (mrSocket != null)
-						mrSocket.Close();
-					break;
-				}
+                        packet.Clear();
+                    }
+                    if (mrSocket != null)
+                        mrSocket.Close();
+                    break;
+                }
 #if LOGGER
-				catch (Exception ex)
-				{
-					logger.Info("Exception : {0}", ex.Message);
+                catch (Exception ex)
+                {
+                    logger.Info("Exception : {0}", ex.Message);
 #else
 				catch
 				{
 #endif
-				}
+                }
 
-				if (die)
-					break;
+                if (die)
+                    break;
 
 #if LOGGER
-				logger.Info("No die, any error - send disconnect.");
+                logger.Info("No die, any error - send disconnect.");
 #endif
-				mrConnector.DispatchEvent(new DisconnectEvent(mrConnector));
-			}
-		}
+                mrConnector.DispatchEvent(new DisconnectEvent(mrConnector));
+            }
+        }
 
-		#endregion
-	}
+        #endregion
+    }
 }
