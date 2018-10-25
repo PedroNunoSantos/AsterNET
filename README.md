@@ -1,3 +1,6 @@
+### This fork add's compatibility with Zycoo CooVox AMI 
+fixes the ManagerConnection.Login - "Timeout waiting for protocol identifier". (tested with CooVox V2)
+
 [![Build Status](https://travis-ci.org/AsterNET/AsterNET.svg?branch=master)](https://travis-ci.org/AsterNET/AsterNET)
 [![NuGet](https://img.shields.io/nuget/v/AsterNET.svg)](https://www.nuget.org/packages/AsterNET)
 
