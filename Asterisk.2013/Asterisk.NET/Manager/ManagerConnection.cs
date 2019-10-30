@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 namespace AsterNET.Manager
 {
     /// <summary>
-    /// Default implemention of the ManagerConnection interface.
+    /// Default implementation of the ManagerConnection interface.
     /// </summary>
     public class ManagerConnection
     {
@@ -46,6 +46,7 @@ namespace AsterNET.Manager
         private int pingInterval = 10000;
 
         private object lockSocket = new object();
+        private object lockSocketWrite = new object();
         private object lockHandlers = new object();
 
         private bool enableEvents = true;
@@ -362,9 +363,14 @@ namespace AsterNET.Manager
         /// </summary>
         public event EventHandler<ZapShowChannelsEvent> ZapShowChannels;
         /// <summary>
-        /// A ConnectionState is triggered after Connect/Disconnect/Reload/Shutdown events.
+        /// A ConnectionState is triggered after Connect/Disconnect/Shutdown events.
         /// </summary>
         public event EventHandler<ConnectionStateEvent> ConnectionState;
+
+        /// <summary>
+        /// A Reload is triggered after Reload events.
+        /// </summary>
+        public event EventHandler<ReloadEvent> Reload;
 
         /// <summary>
         /// When a variable is set
@@ -573,7 +579,7 @@ namespace AsterNET.Manager
 
             Helper.RegisterEventHandler(registeredEventHandlers, typeof(ConnectEvent), arg => fireEvent(ConnectionState, arg));
             Helper.RegisterEventHandler(registeredEventHandlers, typeof(DisconnectEvent), arg => fireEvent(ConnectionState, arg));
-            Helper.RegisterEventHandler(registeredEventHandlers, typeof(ReloadEvent), arg => fireEvent(ConnectionState, arg));
+            Helper.RegisterEventHandler(registeredEventHandlers, typeof(ReloadEvent), arg => fireEvent(Reload, arg));
             Helper.RegisterEventHandler(registeredEventHandlers, typeof(ShutdownEvent), arg => fireEvent(ConnectionState, arg));
 
             Helper.RegisterEventHandler(registeredEventHandlers, typeof(BridgeEvent), arg => fireEvent(Bridge, arg));
@@ -1589,7 +1595,10 @@ namespace AsterNET.Manager
 
         private void sendToAsterisk(string buffer)
         {
-            mrSocket.Write(buffer);
+            lock (lockSocketWrite)
+            {
+                mrSocket.Write(buffer);
+            }
         }
 
         #endregion
@@ -1981,7 +1990,7 @@ namespace AsterNET.Manager
                 fireEvent(e);
                 reconnect(false);
             }
-            else if (!reconnected && reconnectEnable && (e is DisconnectEvent || e is ReloadEvent || e is ShutdownEvent))
+            else if (!reconnected && reconnectEnable && (e is DisconnectEvent || e is ShutdownEvent))
             {
                 ((ConnectionStateEvent)e).Reconnect = true;
                 fireEvent(e);
