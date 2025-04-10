@@ -272,61 +272,60 @@ namespace AsterNET.Manager
 
                         #region processing Response: Follows
 
-                        if (processingCommandResult)
-                        {
-                            string lineLower = line.ToLower(Helper.CultureInfo);
-                            if (lineLower == "--end command--")
-                            {
-                                var commandResponse = new CommandResponse();
-                                Helper.SetAttributes(commandResponse, packet);
-                                commandList.Add(line);
-                                commandResponse.Result = commandList;
-                                processingCommandResult = false;
-                                packet.Clear();
-                                mrConnector.DispatchResponse(commandResponse);
-                            }
-                            else if (lineLower.StartsWith("privilege: ")
-                                || lineLower.StartsWith("actionid: ")
-                                || lineLower.StartsWith("timestamp: ")
-                                || lineLower.StartsWith("server: ")
-                                )
-                                Helper.AddKeyValue(packet, line);
-                            else
-                                commandList.Add(line);
-                            continue;
-                        }
+						if (processingCommandResult)
+						{
+							string lineLower = line.ToLower(Helper.CultureInfo);
+							if (lineLower == "--end command--" || lineLower == "")
+							{
+								var commandResponse = new CommandResponse();
+								Helper.SetAttributes(commandResponse, packet);
+								commandResponse.Result = commandList;
+								processingCommandResult = false;
+								packet.Clear();
+								mrConnector.DispatchResponse(commandResponse);
+							}
+							else if (lineLower.StartsWith("privilege: ")
+								|| lineLower.StartsWith("actionid: ")
+								|| lineLower.StartsWith("timestamp: ")
+								|| lineLower.StartsWith("server: ")
+								)
+								Helper.AddKeyValue(packet, line);
+							else
+								commandList.Add(line);
+							continue;
+						}
 
                         #endregion
 
                         #region collect key: value and ProtocolIdentifier
 
-                        if (!string.IsNullOrEmpty(line))
-                        {
-                            if (wait4identiier && (line.StartsWith("Asterisk Call Manager")
+						if (!string.IsNullOrEmpty(line))
+						{
+							if (wait4identiier && line.StartsWith("Asterisk Call Manager")
 #if ZYCOO
-                            // Zycoo CooVox-U20 V2 responds "VoIP API/AMI/2.0.0" as ProtocolIdentifier
-                                                   || line.StartsWith("VoIP API/AMI")
+                                // Zycoo CooVox-U20 V2 responds "VoIP API/AMI/2.0.0" as ProtocolIdentifier
+                                || line.StartsWith("VoIP API/AMI")
 #endif
-                                    ))
-                            {
-                                wait4identiier = false;
-                                var connectEvent = new ConnectEvent(mrConnector);
-                                connectEvent.ProtocolIdentifier = line;
-                                mrConnector.DispatchEvent(connectEvent);
-                                continue;
-                            }
-                            if (line.Trim().ToLower(Helper.CultureInfo) == "response: follows")
-                            {
-                                // Switch to wait "--END COMMAND--" mode
-                                processingCommandResult = true;
-                                packet.Clear();
-                                commandList.Clear();
-                                Helper.AddKeyValue(packet, line);
-                                continue;
-                            }
-                            Helper.AddKeyValue(packet, line);
-                            continue;
-                        }
+                            )
+							{
+								wait4identiier = false;
+								var connectEvent = new ConnectEvent(mrConnector);
+								connectEvent.ProtocolIdentifier = line;
+								mrConnector.DispatchEvent(connectEvent);
+								continue;
+							}
+							if (line.Trim().ToLower(Helper.CultureInfo) == "response: follows")
+							{
+								// Switch to wait "--END COMMAND--" mode
+								processingCommandResult = true;
+								packet.Clear();
+								commandList.Clear();
+								Helper.AddKeyValue(packet, line);
+								continue;
+							}
+							Helper.AddKeyValue(packet, line);
+							continue;
+						}
 
                         #endregion
 

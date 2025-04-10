@@ -71,7 +71,7 @@ namespace AsterNET.Manager
         /// <summary> Default Slow Reconnect interval in milliseconds.</summary>
         private int reconnectIntervalMax = 10000;
 
-        public char[] VAR_DELIMITER = { '|' };
+		public char[] VAR_DELIMITER = { '|' };
 
         #endregion
 
@@ -719,9 +719,10 @@ namespace AsterNET.Manager
         private void internalEventHandler(object sender, ManagerEvent e)
         {
             int eventHash = e.GetType().Name.GetHashCode();
-            if (registeredEventHandlers.ContainsKey(eventHash))
+            int userEventHash = typeof(UserEvent).Name.GetHashCode();
+            if (registeredEventHandlers.TryGetValue(eventHash, out var currentEvent)
+            || (registeredEventHandlers.TryGetValue(userEventHash, out currentEvent) && typeof(UserEvent).IsAssignableFrom(e.GetType())))
             {
-                var currentEvent = registeredEventHandlers[eventHash];
                 if (currentEvent(e))
                 {
                     return;
@@ -1012,102 +1013,130 @@ namespace AsterNET.Manager
 #if LOGGER
                 logger.Info("Determined Asterisk version: " + asteriskVersion);
 #endif
-                enableEvents = true;
-                ConnectEvent ce = new ConnectEvent(this);
-                ce.ProtocolIdentifier = this.protocolIdentifier;
-                DispatchEvent(ce);
-            }
-            else if (response is ManagerError)
-                throw new ManagerException("Unable login to Asterisk - " + response.Message);
-            else
-                throw new ManagerException("Unknown response during login to Asterisk - " + response.GetType().Name + " with message " + response.Message);
+				enableEvents = true;
+				ConnectEvent ce = new ConnectEvent(this);
+				ce.ProtocolIdentifier = this.protocolIdentifier;
+				DispatchEvent(ce);
+			}
+			else if (response is ManagerError)
+				throw new ManagerException("Unable login to Asterisk - " + response.Message);
+			else
+				throw new ManagerException("Unknown response during login to Asterisk - " + response.GetType().Name + " with message " + response.Message);
 
-        }
-        #endregion
+		}
+		#endregion
 
-        #region determineVersion()
-        protected internal AsteriskVersion determineVersion()
-        {
-            Response.ManagerResponse response;
-            response = SendAction(new Action.CommandAction("core show version"), defaultResponseTimeout * 2);
-            if (response is Response.CommandResponse)
-            {
-                foreach (string line in ((Response.CommandResponse)response).Result)
-                {
-                    foreach (Match m in Common.ASTERISK_VERSION.Matches(line))
-                    {
-                        if (m.Groups.Count >= 2)
-                        {
-                            version = m.Groups[1].Value;
-                            if (version.StartsWith("1.4."))
-                            {
-                                VAR_DELIMITER = new char[] { '|' };
-                                return AsteriskVersion.ASTERISK_1_4;
-                            }
-                            else if (version.StartsWith("1.6."))
-                            {
-                                VAR_DELIMITER = new char[] { '|' };
-                                return Manager.AsteriskVersion.ASTERISK_1_6;
-                            }
-                            else if (version.StartsWith("1.8."))
-                            {
-                                VAR_DELIMITER = new char[] { '|' };
-                                return Manager.AsteriskVersion.ASTERISK_1_8;
-                            }
-                            else if (version.StartsWith("10."))
-                            {
-                                VAR_DELIMITER = new char[] { '|' };
-                                return Manager.AsteriskVersion.ASTERISK_10;
-                            }
-                            else if (version.StartsWith("11."))
-                            {
-                                VAR_DELIMITER = new char[] { ',' };
-                                return Manager.AsteriskVersion.ASTERISK_11;
-                            }
-                            else if (version.StartsWith("12."))
-                            {
-                                VAR_DELIMITER = new char[] { ',' };
-                                return Manager.AsteriskVersion.ASTERISK_12;
-                            }
-                            else if (version.StartsWith("13."))
-                            {
-                                VAR_DELIMITER = new char[] { ',' };
-                                return Manager.AsteriskVersion.ASTERISK_13;
-                            }
-                            else
-                                throw new ManagerException("Unknown Asterisk version " + version);
-                        }
-                    }
-                }
-            }
+		#region determineVersion()
+		protected internal AsteriskVersion determineVersion()
+		{
+			Response.ManagerResponse response;
+			response = SendAction(new Action.CommandAction("core show version"), defaultResponseTimeout * 2);
+			if (response is Response.CommandResponse)
+			{
+				foreach (string line in ((Response.CommandResponse)response).Result)
+				{
+					foreach (Match m in Common.ASTERISK_VERSION.Matches(line))
+					{
+						if (m.Groups.Count >= 2)
+						{
+							version = m.Groups[1].Value;
+							if (version.StartsWith("1.4."))
+							{
+								VAR_DELIMITER = new char[] { '|' };
+								return AsteriskVersion.ASTERISK_1_4;
+							}
+							else if (version.StartsWith("1.6."))
+							{
+								VAR_DELIMITER = new char[] { '|' };
+								return Manager.AsteriskVersion.ASTERISK_1_6;
+							}
+							else if (version.StartsWith("1.8."))
+							{
+								VAR_DELIMITER = new char[] { '|' };
+								return Manager.AsteriskVersion.ASTERISK_1_8;
+							}
+							else if (version.StartsWith("10."))
+							{
+								VAR_DELIMITER = new char[] { '|' };
+								return Manager.AsteriskVersion.ASTERISK_10;
+							}
+							else if (version.StartsWith("11."))
+							{
+								VAR_DELIMITER = new char[] { ',' };
+								return Manager.AsteriskVersion.ASTERISK_11;
+							}
+							else if (version.StartsWith("12."))
+							{
+								VAR_DELIMITER = new char[] { ',' };
+								return Manager.AsteriskVersion.ASTERISK_12;
+							}
+							else if (version.StartsWith("13."))
+							{
+								VAR_DELIMITER = new char[] { ',' };
+								return Manager.AsteriskVersion.ASTERISK_13;
+							}
+							else if (version.StartsWith("14."))
+							{
+								VAR_DELIMITER = new char[] { ',' };
+								return Manager.AsteriskVersion.ASTERISK_14;
+							}
+							else if (version.StartsWith("15."))
+							{
+								VAR_DELIMITER = new char[] { ',' };
+								return Manager.AsteriskVersion.ASTERISK_15;
+							}
+							else if (version.StartsWith("16."))
+							{
+								VAR_DELIMITER = new char[] { ',' };
+								return Manager.AsteriskVersion.ASTERISK_16;
+							}
+							else if (version.StartsWith("17."))
+							{
+								VAR_DELIMITER = new char[] { ',' };
+								return Manager.AsteriskVersion.ASTERISK_17;
+							}
+							else if (version.IndexOf('.') >= 2)
+							{
+								VAR_DELIMITER = new char[] { ',' };
+								return Manager.AsteriskVersion.ASTERISK_Newer;
+							}
+							else
+								throw new ManagerException("Unknown Asterisk version " + version);
+						}
+					}
+				}
+			}
 
-            Response.ManagerResponse showVersionFilesResponse = SendAction(new Action.CommandAction("show version files"), defaultResponseTimeout * 2);
-            if (showVersionFilesResponse is Response.CommandResponse)
-            {
-                IList showVersionFilesResult = ((Response.CommandResponse)showVersionFilesResponse).Result;
-                if (showVersionFilesResult != null && showVersionFilesResult.Count > 0)
-                {
-                    string line1;
-                    line1 = (string)showVersionFilesResult[0];
-                    if (line1 != null && line1.StartsWith("File"))
-                        return AsteriskVersion.ASTERISK_1_2;
-                }
-            }
-            return AsteriskVersion.ASTERISK_1_0;
-        }
+			Response.ManagerResponse showVersionFilesResponse = SendAction(new Action.CommandAction("show version files"), defaultResponseTimeout * 2);
+			if (showVersionFilesResponse is Response.CommandResponse)
+			{
+				IList showVersionFilesResult = ((Response.CommandResponse)showVersionFilesResponse).Result;
+				if (showVersionFilesResult != null && showVersionFilesResult.Count > 0)
+				{
+					string line1;
+					line1 = (string)showVersionFilesResult[0];
+					if (line1 != null && line1.StartsWith("File"))
+					{
+						VAR_DELIMITER = new char[] { '|' };
+						return AsteriskVersion.ASTERISK_1_2;
+					}
+				}
+			}
+			return AsteriskVersion.ASTERISK_1_0;
+		}
 
-        #endregion
+		#endregion
 
-        #region connect()
-        protected internal bool connect()
-        {
-            bool result = false;
-            bool startReader = false;
+		#region connect()
+		protected internal bool connect()
+		{
+			bool result = false;
+			bool startReader = false;
 
-            lock (lockSocket)
-            {
-                if (mrSocket == null)
-                {
+			lock (lockSocket)
+			{
+				if (mrSocket == null)
+				{
 #if LOGGER
                     logger.Info("Connecting to {0}:{1}", hostname, port);
 #endif
@@ -2049,7 +2078,7 @@ namespace AsterNET.Manager
         {
             if (enableEvents && internalEvent != null)
                 if (UseASyncEvents)
-                    internalEvent.BeginInvoke(this, e, new AsyncCallback(eventComplete), null);
+                    Task.Run(() => internalEvent.Invoke(this, e)).ContinueWith(eventComplete);
                 else
                     internalEvent.Invoke(this, e);
         }
